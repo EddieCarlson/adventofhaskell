@@ -1,0 +1,39 @@
+import Data.List
+
+parse [] = []
+parse (x:xs) | x == '#' = 1:(parse xs)
+             | x == '.' = 0:(parse xs)
+
+stayOn :: (Eq a, Num a) => [a]
+stayOn = [2, 3]
+
+change :: (Eq a, Num a) => a -> a -> a
+change cur nCount | cur == 1 && (nCount `elem` stayOn) = 1
+                  | cur == 1 = 0
+                  | nCount == 3 = 1
+                  | otherwise = 0
+
+output :: (Eq a, Num a) => [[a]] -> a
+output w = change cur ((sum $ map sum w) - cur)
+  where cur = (!!1) $ (!!1) w
+
+groupThree x | length x < 3 = []
+groupThree (a:b:c:ds) = [a, b, c] : groupThree (b:c:ds)
+
+padArray n = (n:).(++[n])
+
+padAB :: (Num a) => [[a]] -> [[a]]
+padAB g = padArray padRow g
+  where padRow = map (const 0) (head g)
+
+padGrid = padAB . map (padArray 0)
+
+windows = map (transpose . (map groupThree)) . groupThree . padGrid
+
+transform = map (map output) . windows
+
+go = do 
+  text <- lines <$> readFile "grid.txt"
+  let initialGrid = map parse text
+      finalGrid = (!!100) $ iterate transform initialGrid
+  return (sum $ map sum finalGrid)
