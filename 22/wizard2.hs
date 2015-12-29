@@ -3,6 +3,7 @@ import Data.List
 import Data.Maybe
 import Debug.Trace
 import Control.Monad.Writer
+import Data.Generics.Aliases
 
 data Chr = Chr { hp::Int, mana::Int } deriving Show
 
@@ -17,16 +18,17 @@ rechargeAndCost = (Recharge,229)
 bossDmg = 8
 shieldValue = 7
 
-data Game = Game { player::Chr, bossHp::Int, poisonCount::Int, shieldCount::Int, rechargeCount::Int, totalSpent::Int, history::[(Game, Spell)] } deriving Show
-
+data Game = Game { player::Chr, bossHp::Int, poisonCount::Int, shieldCount::Int, rechargeCount::Int,
+                   totalSpent::Int, history::[(Game, Spell)] } deriving Show
 
 gInfo g@(Game (Chr h m) bhp pc sc rc ts tr) = Game (Chr h m) bhp pc sc rc ts []
 
-cast g@(Game (Chr h m) bhp pc sc rc ts tr) (spell, cost) | spell == MagicMissile = Game (Chr h newMana) (bhp - 4) pc sc rc newSpent newH
-                                                         | spell == Drain =        Game (Chr (h + 2) newMana) (bhp - 2) pc sc rc newSpent newH
-                                                         | spell == Poison =       Game (Chr h newMana) bhp (pc + 6) sc rc newSpent newH
-                                                         | spell == Shield =       Game (Chr h newMana) bhp pc (sc + 6) rc newSpent newH
-                                                         | spell == Recharge =     Game (Chr h newMana) bhp pc sc (rc + 5) newSpent newH
+cast g@(Game (Chr h m) bhp pc sc rc ts tr) (spell, cost)
+  | spell == MagicMissile = Game (Chr h newMana) (bhp - 4) pc sc rc newSpent newH
+  | spell == Drain =        Game (Chr (h + 2) newMana) (bhp - 2) pc sc rc newSpent newH
+  | spell == Poison =       Game (Chr h newMana) bhp (pc + 6) sc rc newSpent newH
+  | spell == Shield =       Game (Chr h newMana) bhp pc (sc + 6) rc newSpent newH
+  | spell == Recharge =     Game (Chr h newMana) bhp pc sc (rc + 5) newSpent newH
   where newMana = m - cost
         newSpent = ts + cost
         newH = (gInfo g, spell):tr
@@ -73,18 +75,24 @@ bossAttack g@(Game (Chr h m) bhp pc sc rc ts tr) = Game (Chr (h - dmg) m) bhp pc
 
 -- do all of same mana cost at once
 
-playerTurn2 :: [Game] -> Game
-playerTurn2 curGames = 
-  if (isJust $ winMaybe curGames) then (fromJust $ winMaybe curGames)
-  else 
-    let newGames = trace (show $ totalSpent headGame) $ concatMap (\g -> map (cast g) (availableSpells g)) (map applyEffects lowestManaGames)
-        winningMaybe = winMaybe newGames 
-        bossGames = filter ((>0) . hp . player) $ map bossTurn newGames
-    in fromMaybe (playerTurn2 (rest ++ bossGames)) winningMaybe
+findWinning = find ((<=0) . bossHp)
+
+castAvailable :: Game -> [Game]
+castAvailable g = map (cast g) (availableSpells g)
+
+playerTurn :: [Game] -> ([Game], [Game])
+playerTurn curGames = trace (show $ totalSpent headGame) (playerHasMovedGames, rest)
   where headGame = head sortedCurGames
-        (lowestManaGames, rest) = span (\x -> (totalSpent x) == (totalSpent headGame)) sortedCurGames
         sortedCurGames = sortOn totalSpent curGames
-        winMaybe = find ((<=0) . bossHp)
+        (lowestManaGames, rest) = span (\x -> (totalSpent x) == (totalSpent headGame)) sortedCurGames
+        playerHasMovedGames = concatMap castAvailable $ map applyEffects lowestManaGames
+
+playGame :: [Game] -> Maybe Game
+playGame curGames = winAfterPlayerTurn `orElse` recurse
+  where (playerGames, rest) = playerTurn curGames      
+        winAfterPlayerTurn = findWinning playerGames
+        bossGames = filter ((>0) . hp . player) $ map bossTurn playerGames
+        recurse = findWinning bossGames `orElse` (playGame (rest ++ bossGames))
 
 
 -- part 2
