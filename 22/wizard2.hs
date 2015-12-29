@@ -44,7 +44,6 @@ applyRc g@(Game (Chr h m) bhp pc sc rc ts tr) | rc > 0 = Game (Chr h (m + 101)) 
 
 applyEffects = applyPc . applySc . applyRc
 
-
 availableSpells g@(Game (Chr _ m) _ pc sc rc _ _) = filter ((<= m) . snd) (spells ++ catMaybes [poison, shield, recharge])
   where poison = if pc == 0 then Just poisonAndCost else Nothing
         shield = if sc == 0 then Just shieldAndCost else Nothing
@@ -100,16 +99,16 @@ playGame curGames = winAfterPlayerTurn `orElse` recurse
 playerApplyEffects = map applyEffects . filter ((>0) . hp . player) . map loseOne
   where loseOne g@(Game (Chr h m) bhp pc sc rc ts tr) = Game (Chr (h - 1) m) bhp pc sc rc ts tr
 
-playerTurn3 :: [Game] -> Game
-playerTurn3 curGames = 
-  if (isJust $ winMaybe curGames) then (fromJust $ winMaybe curGames)
-  else 
-    let newGames = trace (show $ totalSpent headGame) $ concatMap (\g -> map (cast g) (availableSpells g)) (playerApplyEffects lowestManaGames)
-        winningMaybe = winMaybe newGames 
-        bossGames = filter ((>0) . hp . player) $ map bossTurn newGames
-    in fromMaybe (playerTurn3 (rest ++ bossGames)) winningMaybe
+playerTurn2 :: [Game] -> ([Game], [Game])
+playerTurn2 curGames = trace (show $ totalSpent headGame) (playerHasMovedGames, rest)
   where headGame = head sortedCurGames
-        (lowestManaGames, rest) = span (\x -> (totalSpent x) == (totalSpent headGame)) sortedCurGames
         sortedCurGames = sortOn totalSpent curGames
-        winMaybe = find ((<=0) . bossHp)
+        (lowestManaGames, rest) = span (\x -> (totalSpent x) == (totalSpent headGame)) sortedCurGames
+        playerHasMovedGames = concatMap castAvailable $ playerApplyEffects lowestManaGames
 
+playGame2 :: [Game] -> Maybe Game
+playGame2 curGames = winAfterPlayerTurn `orElse` recurse
+  where (playerGames, rest) = playerTurn2 curGames      
+        winAfterPlayerTurn = findWinning playerGames
+        bossGames = filter ((>0) . hp . player) $ map bossTurn playerGames
+        recurse = findWinning bossGames `orElse` (playGame2 (rest ++ bossGames))
